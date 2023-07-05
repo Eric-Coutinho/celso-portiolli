@@ -1,0 +1,152 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Local</title>
+</head>
+
+<body>
+    <h1>Chat Local</h1>
+    <div id="chat">
+        <div id="user-info" style="display: none;">
+            <p>Usuário: <span id="username-display"></span></p>
+        </div>
+        <div id="login-form">
+            <input type="text" id="username-input" placeholder="Nome de Usuário" />
+            <input type="password" id="password-input" placeholder="Senha" />
+            <button onclick="login()">Login</button>
+            <button onclick="signup()">Cadastrar</button>
+        </div>
+        <div id="group-form" style="display: none;">
+            <input type="text" id="group-input" placeholder="Digite o nome do grupo" />
+            <button onclick="joinGroup()">Entrar no Grupo</button>
+        </div>
+        <ul id="messages" style="display: none;"></ul>
+        <form id="message-form" style="display: none;">
+            <input type="text" id="message-input" autocomplete="off" />
+            <button>Enviar</button>
+        </form>
+    </div>
+    <div id="group-list" style="display: none;">
+        <h3>Grupos:</h3>
+        <ul id="groups"></ul>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentGroup = null;
+        let username = null;
+
+        function login() {
+            username = document.getElementById('username-input').value.trim();
+            const password = document.getElementById('password-input').value.trim();
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password }),
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (data.message === 'Login successful') {
+                        alert('Login successful!');
+                        document.getElementById('user-info').style.display = 'block';
+                        document.getElementById('username-display').textContent = username;
+                        document.getElementById('login-form').style.display = 'none';
+                        document.getElementById('group-form').style.display = 'block';
+                        document.getElementById('message-form').style.display = 'block';
+                        document.getElementById('messages').style.display = 'block';
+                        joinGroup();
+                    } else {
+                        alert('Login failed. Please try again.');
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+        }
+
+        function signup() {
+            username = document.getElementById('username-input').value.trim();
+            const password = document.getElementById('password-input').value.trim();
+            fetch('/signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password }),
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (data.message === 'Signup successful') {
+                        alert('Signup successful! Please login.');
+                    } else if (data.message === 'Username already exists') {
+                        alert('Username already exists. Please choose a different username.');
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+        }
+
+        function joinGroupByName(groupName) {
+            if (groupName !== '' && username !== null) {
+                socket.emit('join group', { groupName, username });
+                currentGroup = groupName;
+                document.getElementById('group-list').style.display = 'none';
+                document.getElementById('group-form').style.display = 'none';
+                document.getElementById('message-form').style.display = 'block';
+                document.getElementById('messages').style.display = 'block';
+            }
+        }
+
+        function showGroupList() {
+            document.getElementById('group-list').style.display = 'block';
+            const groupsList = document.getElementById('groups');
+            groupsList.innerHTML = '';
+            for (const groupName in groups) {
+                const li = document.createElement('li');
+                li.textContent = groupName;
+                li.onclick = () => {
+                    leaveGroup();
+                    joinGroupByName(groupName);
+                };
+                groupsList.appendChild(li);
+            }
+        }
+
+        function leaveGroup() {
+            if (currentGroup) {
+                socket.emit('leave group', currentGroup);
+                currentGroup = null;
+                document.getElementById('messages').innerHTML = '';
+            }
+        }
+
+
+        document.getElementById('message-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const messageInput = document.getElementById('message-input');
+            const message = messageInput.value.trim();
+            if (message !== '' && currentGroup) {
+                socket.emit('chat message', { groupName: currentGroup, message, username });
+                messageInput.value = '';
+            }
+        });
+
+        socket.on('chat message', (data) => {
+            const { sender, message } = data;
+            const messagesList = document.getElementById('messages');
+            const li = document.createElement('li');
+            li.textContent = `${sender}: ${message}`;
+            messagesList.appendChild(li);
+        });
+    </script>
+</body>
+
+</html>
